@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Text.Json;
-using System.Xml.Serialization;
+using Newtonsoft.Json;
+using System.Xml;
 using System.IO;
 
 namespace Library
@@ -9,6 +9,9 @@ namespace Library
     {
         private string PATH;
         private Book book;
+        private StreamWriter swrite;
+        private StreamReader sreader;
+        private JsonSerializer serializer = new JsonSerializer();
 
         public BookIOService(string path)
         {
@@ -45,44 +48,37 @@ namespace Library
         public void LoadBookfromjson()
         {
             var fileExists = File.Exists(PATH);
-            var options = new JsonSerializerOptions
-            {
-                WriteIndented = true
-            };
-            if(!fileExists)
+            if (!fileExists)
             {
                 Console.WriteLine("No file for input data.");
             }
             else
             {
-                using (FileStream reader = new FileStream(PATH, FileMode.Open))
+                using (sreader = new StreamReader(PATH))
+                using (JsonReader reader = new JsonTextReader(sreader))
                 {
-                    byte[] restoredBook = new byte[reader.Length];
-                    reader.Read(restoredBook, 0, restoredBook.Length);
-                    var utf8Reader = new Utf8JsonReader(restoredBook);
-                    Book deserializeBook =
-                        JsonSerializer.Deserialize<Book>(ref utf8Reader, options);
-                    if (deserializeBook == null)
-                        Console.WriteLine("No data for output.");
-                    else
-                        Console.WriteLine($"Name: {deserializeBook.Name}\n" +
-                                          $"Author: {deserializeBook.Author}\n" +
-                                          $"Year: {deserializeBook.Year}\n");
+                    try
+                    {
+                        object book = serializer.Deserialize(reader);
+                        Console.WriteLine(book);
 
+                    }
+                    catch 
+                    {
+
+                        Console.WriteLine("No data for output.");
+                    }
                 }
             }
         }
 
         public void SaveBookasjson(Book book)
         {
-            var options = new JsonSerializerOptions
+            using (swrite = new StreamWriter(PATH))
+            using (JsonWriter writer = new JsonTextWriter(swrite))
             {
-                WriteIndented = true
-            };
-            using (FileStream writer = new FileStream(PATH, FileMode.Create))
-            {
-                byte[] json = JsonSerializer.SerializeToUtf8Bytes<Book>(book, options);
-                writer.Write(json);
+                serializer.NullValueHandling = NullValueHandling.Ignore;
+                serializer.Serialize(writer, book);
             }
             Console.WriteLine("Save Success.");
         }
@@ -99,29 +95,41 @@ namespace Library
             }
             else
             {
-                using (FileStream reader = new FileStream(PATH, FileMode.Open))
+                using (XmlReader reader =  XmlReader.Create(PATH, new XmlReaderSettings { IgnoreWhitespace = true }))
                 {
-                    XmlSerializer xmlSerializer = new XmlSerializer(typeof(Book));
-                    Book deserializeBook = (Book)xmlSerializer.Deserialize(reader);
-                    if (deserializeBook == null)
-                        Console.WriteLine("No data for output.");
-                    else
-                        Console.WriteLine($"Name: {deserializeBook.Name}\n" +
-                                          $"Author: {deserializeBook.Author}\n" +
-                                          $"Year: {deserializeBook.Year}\n");
+                    reader.MoveToContent();
+                    try
+                    {
+                        reader.ReadStartElement("Books");
+                        Console.WriteLine($"Name: {reader.GetAttribute("Name")}\n" +
+                                            $"Author: {reader.GetAttribute("Author")}\n" +
+                                            $"Year: {reader.GetAttribute("Year")}\n");
+                    }
+                    catch 
+                    {
 
+                        Console.WriteLine("No data for output.");
+                    }
                 }
             }
         }
 
         public void SaveBookasxml(Book book)
         {
-            XmlSerializer xmlSerializer = new XmlSerializer(typeof(Book));
-            using(FileStream writer = new FileStream(PATH, FileMode.Create))
+            using (XmlWriter writer = XmlWriter.Create(
+                PATH,
+                new XmlWriterSettings() { Indent = true }))
             {
-                xmlSerializer.Serialize(writer, book);
-                Console.WriteLine("Save Success.");
+                writer.WriteStartDocument();
+                writer.WriteStartElement("Books");
+                writer.WriteStartElement("Book");
+                writer.WriteAttributeString("Name", $"{book.Name}");
+                writer.WriteAttributeString("Author", $"{book.Author}");
+                writer.WriteAttributeString("Year", $"{book.Year}");
+                writer.WriteEndElement();
+                writer.Flush();
             }
+            Console.WriteLine("Save Success.");
         }
 
         #endregion
